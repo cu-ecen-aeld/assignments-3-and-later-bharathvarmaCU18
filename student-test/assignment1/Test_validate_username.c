@@ -21,5 +21,4 @@ void test_validate_my_username()
 
     TEST_ASSERT_EQUAL_STRING_MESSAGE(my_username(), malloc_username_from_conf_file(), "Check Test_validate_username.c file again");
  
-    //TEST_ASSERT_TRUE_MESSAGE(false,"AESD students, please fix me!");
 }
