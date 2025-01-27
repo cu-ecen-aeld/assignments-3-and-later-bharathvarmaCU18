@@ -27,7 +27,7 @@ int main(int argc, char* args[])
     /* File to write could not be opened */
     if(write_fd == -1)
     {
-        syslog(LOG_ERR, "Specified file:%s couldn't be opened!",args[1]);
+        syslog(LOG_ERR, "Specified file:%s couldn't be opened!",write_file);
         closelog();
         return 1;
     }
@@ -37,7 +37,7 @@ int main(int argc, char* args[])
 
     if(write_bytes == -1)
     {
-        syslog(LOG_ERR, "Specified file:%s couldn't be written!",args[1]);
+        syslog(LOG_ERR, "Specified file:%s couldn't be written!",write_file);
         closelog();
 	close(write_fd);
         return 1;
