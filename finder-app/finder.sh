@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # directory(arg 1)  and string(arg 2) be searched
 

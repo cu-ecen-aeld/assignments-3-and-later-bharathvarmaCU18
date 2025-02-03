@@ -7,7 +7,7 @@ set -e
 OUTDIR=$1
 
 if [ -z "${OUTDIR}" ]; then
-    OUTDIR=/tmp/aeld
+    OUTDIR="/home/vbharath/aesd_kernal"
     echo "No outdir specified, using ${OUTDIR}"
 fi
 
