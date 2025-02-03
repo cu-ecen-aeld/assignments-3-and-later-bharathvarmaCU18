@@ -61,9 +61,11 @@ fi
 
 cd "$OUTDIR"
 # TODO: Create necessary base directories
-mkdir -p rootfs/{bin,dev,etc,home,lib,lib64,proc,sbin,sys,tmp,usr,var}
-mkdir -p rootfs/usr/{bin,lib,sbin}
-mkdir -p rootfs/var/log
+mkdir -p rootfs \
+    rootfs/bin rootfs/dev rootfs/etc rootfs/home rootfs/lib rootfs/lib64 \
+    rootfs/proc rootfs/sbin rootfs/sys rootfs/tmp rootfs/usr rootfs/var \
+    rootfs/usr/bin rootfs/usr/lib rootfs/usr/sbin \
+    rootfs/var/log
 
 cd "$OUTDIR"
 if [ ! -d "${OUTDIR}/busybox" ]
@@ -104,7 +106,7 @@ sudo mknod -m 666 ${OUTDIR}/rootfs/dev/null c 1 3
 sudo mknod -m 600 ${OUTDIR}/rootfs/dev/console c 5 1
 
 # TODO: Clean and build the writer utility
-
+cd "${FINDER_APP_DIR}"
 make clean
 make CROSS_COMPILE=${CROSS_COMPILE}
 
