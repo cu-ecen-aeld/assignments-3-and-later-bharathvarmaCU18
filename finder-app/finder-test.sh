@@ -3,9 +3,6 @@
 # Author: Siddhant Jajoo
 
 
-make clean
-make
-
 set -e
 set -u
 
