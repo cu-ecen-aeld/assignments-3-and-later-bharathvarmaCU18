@@ -3,7 +3,7 @@
 # Startup script for aesdsocket daemon
 
 NAME=aesdsocket
-EXEC="aesdsocket" 
+EXEC="/usr/bin/aesdsocket" 
 echo $EXEC
 ARGS="-d"
 
