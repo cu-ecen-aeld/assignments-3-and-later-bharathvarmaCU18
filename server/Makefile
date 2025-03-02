@@ -2,10 +2,10 @@
 CROSS_COMPILE ?=
 
 # compiler and compiler flags
-CC = $(CROSS_COMPILE)gcc
-CFLAGS = -Wall -g
-LDFLAGS = -lpthread
-EXEC = aesdsocket
+CC ?= $(CROSS_COMPILE)gcc
+CFLAGS ?= -Wall -g -Werror
+LDFLAGS ?= -lpthread -lrt
+EXEC ?= aesdsocket
 SOURCEFILES = aesdsocket.c
 OBJFILES = aesdsocket.o
 
