@@ -4,7 +4,7 @@ CROSS_COMPILE ?=
 # compiler and compiler flags
 CC = $(CROSS_COMPILE)gcc
 CFLAGS = -Wall -g
-
+LDFLAGS = -lpthread
 EXEC = aesdsocket
 SOURCEFILES = aesdsocket.c
 OBJFILES = aesdsocket.o
@@ -17,10 +17,10 @@ OBJFILES = aesdsocket.o
 all: $(EXEC)
 
 $(EXEC): $(OBJFILES)
-	$(CC) $(CFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(OBJFILES): $(SOURCEFILES)
-	$(CC) $(CFLAGS) -c $^ -o $@
+	$(CC) $(CFLAGS) -c $^ -o $@ $(LDFLAGS)
 
 
 # PHONY allows make to clean if there is a naming conflict due to a file named clean
