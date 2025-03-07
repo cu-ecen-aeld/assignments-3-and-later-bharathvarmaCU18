@@ -51,7 +51,6 @@ Code: d2800001 d2800000 d503233f d50323bf (b900003f)
 
 ## Analyzing call trace  
 
-`
  faulty_write+0x10/0x20 [faulty]  
  ksys_write+0x74/0x110  
  __arm64_sys_write+0x1c/0x30  
@@ -61,7 +60,6 @@ Code: d2800001 d2800000 d503233f d50323bf (b900003f)
  el0_svc+0x2c/0x90  
  el0t_64_sync_handler+0xf4/0x120  
  el0t_64_sync+0x18c/0x190  
-`
 
 
 This the order of functions that were called bottom to top before encountering the oops message  
