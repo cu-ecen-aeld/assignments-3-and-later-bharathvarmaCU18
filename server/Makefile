@@ -4,7 +4,7 @@ CROSS_COMPILE ?=
 # compiler and compiler flags
 CC ?= $(CROSS_COMPILE)gcc
 CFLAGS ?= -Wall -g -Werror
-LDFLAGS ?= -lpthread -lrt
+LDFLAGS ?= -pthread -lrt
 EXEC ?= aesdsocket
 SOURCEFILES = aesdsocket.c
 OBJFILES = aesdsocket.o
