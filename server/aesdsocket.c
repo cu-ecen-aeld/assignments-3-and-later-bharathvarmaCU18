@@ -17,6 +17,10 @@
 #define STATIC_BUFFER_SIZE 1024
 #define TMP_FILE_PATH "/var/tmp/aesdsocketdata"
 
+#ifndef USE_AESD_CHAR_DEVICE
+    #define USE_AESD_CHAR_DEVICE 1
+#endif
+
 volatile sig_atomic_t keep_running = 1;
 int server_fd;
 pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -43,7 +47,14 @@ void aesdsocket_signal_handler(int signo) {
 
 void append_to_tmp_file(const char *data, size_t size)
 {
-    int fd = open(TMP_FILE_PATH, O_WRONLY | O_CREAT | O_APPEND, 0644);
+
+    int fd;
+    #ifdef USE_AESD_CHAR_DEVICE
+        fd = open("/dev/aesdchar", O_WRONLY);
+    #else
+        fd = open(TMP_FILE_PATH, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    #endif
+
     if (fd == -1)
     {
         syslog(LOG_ERR, "Failed to open file: %s", strerror(errno));
@@ -56,7 +67,14 @@ void append_to_tmp_file(const char *data, size_t size)
 
 void send_file_data_to_client(int client_fd)
 {
-    int fd = open(TMP_FILE_PATH, O_RDONLY);
+    int fd;
+    
+    #ifdef USE_AESD_CHAR_DEVICE
+        fd = open("/dev/aesdchar", O_RDONLY);
+    #else
+        fd = open(TMP_FILE_PATH, O_RDONLY);
+    #endif
+    
     if (fd == -1)
     {
         syslog(LOG_ERR, "Failed to open file for reading: %s", strerror(errno));
@@ -98,6 +116,11 @@ void *handle_client(void *c_fd)
 
 
 void *timestamp_thread(void *arg) {
+
+    #ifdef USE_AESD_CHAR_DEVICE
+        return NULL;
+    #endif
+    
     while (keep_running) {
         // Sleep in 1-second chunks to allow quick exit
         for(int i = 0; i < 10 && keep_running; i++) {
@@ -195,8 +218,11 @@ int main(int argc, char *argv[])
         }
     }
 
-    pthread_t timestamp_thread_id;
-    pthread_create(&timestamp_thread_id, NULL, timestamp_thread, NULL);
+    #ifndef USE_AESD_CHAR_DEVICE
+        pthread_t timestamp_thread_id;
+        pthread_create(&timestamp_thread_id, NULL, timestamp_thread, NULL);
+    #endif
+
 
     while (keep_running)
     {
@@ -227,8 +253,10 @@ int main(int argc, char *argv[])
     }
 
 
+    #ifndef USE_AESD_CHAR_DEVICE
     // Cleanup and join threads
     pthread_join(timestamp_thread_id, NULL);
+    #endif
 
     //pthread_mutex_lock(&list_mutex);
     while (thread_list != NULL) {
@@ -240,7 +268,10 @@ int main(int argc, char *argv[])
     }
     //pthread_mutex_unlock(&list_mutex);
 
-    remove(TMP_FILE_PATH);
+    #ifndef USE_AESD_CHAR_DEVICE
+        remove(TMP_FILE_PATH);
+    #endif
+
     closelog();
     return 0;
 }

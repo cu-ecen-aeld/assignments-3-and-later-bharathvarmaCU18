@@ -17,11 +17,13 @@
 #include <linux/types.h>
 #include <linux/cdev.h>
 #include <linux/fs.h> // file_operations
+#include <linux/slab.h>  // For kmalloc/kfree
+#include <linux/string.h> // For memchr
 #include "aesdchar.h"
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
-MODULE_AUTHOR("Your Name Here"); /** TODO: fill in your name **/
+MODULE_AUTHOR("Bharath"); /** TODO: fill in your name **/
 MODULE_LICENSE("Dual BSD/GPL");
 
 struct aesd_dev aesd_device;
@@ -32,6 +34,9 @@ int aesd_open(struct inode *inode, struct file *filp)
     /**
      * TODO: handle open
      */
+    struct aesd_dev *dev;
+    dev = container_of(inode->i_cdev, struct aesd_dev, cdev);
+    filp->private_data = dev;
     return 0;
 }
 
@@ -52,6 +57,31 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
     /**
      * TODO: handle read
      */
+     
+    struct aesd_dev *dev = filp->private_data;
+    size_t entry_offset;
+    struct aesd_buffer_entry *entry;
+
+    mutex_lock(&dev->lock);
+    
+    entry = aesd_circular_buffer_find_entry_offset_for_fpos(
+        &dev->circ_buffer, *f_pos, &entry_offset);
+    
+    if(entry)
+    {
+        size_t bytes_to_read = min(count, entry->size - entry_offset);
+        if(copy_to_user(buf, entry->buffptr + entry_offset, bytes_to_read))
+        {
+            retval = -EFAULT;
+        } else
+        {
+            retval = bytes_to_read;
+            *f_pos += bytes_to_read;
+        }
+    }
+    
+    mutex_unlock(&dev->lock);
+
     return retval;
 }
 
@@ -63,6 +93,69 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
     /**
      * TODO: handle write
      */
+     
+    struct aesd_dev *dev = filp->private_data;
+    char *data = kmalloc(count, GFP_KERNEL);
+    char *newline = NULL;
+    
+    if(!data) return retval;
+    
+    if(copy_from_user(data, buf, count))
+    {
+        retval = -EFAULT;
+        goto out;
+    }
+    
+    mutex_lock(&dev->lock);
+    
+    newline = memchr(data, '\n', count);
+    
+    if(newline)
+    {
+        size_t total_size = dev->partial_size + (newline - data + 1);
+        char *combined = krealloc(dev->partial_write, total_size, GFP_KERNEL);
+        
+        if(!combined)
+        {
+            retval = -ENOMEM;
+            goto unlock;
+        }
+        
+        // Handle buffer full condition
+        if(dev->circ_buffer.full) {
+            kfree(dev->circ_buffer.entry[dev->circ_buffer.out_offs].buffptr);
+        }
+        
+        memcpy(combined + dev->partial_size, data, newline - data + 1);
+        struct aesd_buffer_entry entry = {
+            .buffptr = combined,
+            .size = total_size
+        };
+        aesd_circular_buffer_add_entry(&dev->circ_buffer, &entry);
+        
+        dev->partial_write = NULL;
+        dev->partial_size = 0;
+        retval = newline - data + 1;
+    }
+    else
+    {
+        dev->partial_write = krealloc(dev->partial_write, 
+                                    dev->partial_size + count, GFP_KERNEL);
+        if(!dev->partial_write)
+        {
+            retval = -ENOMEM;
+            goto unlock;
+        }
+        memcpy(dev->partial_write + dev->partial_size, data, count);
+        dev->partial_size += count;
+        retval = count;
+    }
+
+unlock:
+    mutex_unlock(&dev->lock);
+out:
+    kfree(data);
+
     return retval;
 }
 struct file_operations aesd_fops = {
@@ -106,6 +199,12 @@ int aesd_init_module(void)
      * TODO: initialize the AESD specific portion of the device
      */
 
+    memset(&aesd_device, 0, sizeof(struct aesd_dev));
+    mutex_init(&aesd_device.lock);
+    aesd_circular_buffer_init(&aesd_device.circ_buffer);
+    aesd_device.partial_write = NULL;
+    aesd_device.partial_size = 0;
+
     result = aesd_setup_cdev(&aesd_device);
 
     if( result ) {
@@ -124,6 +223,16 @@ void aesd_cleanup_module(void)
     /**
      * TODO: cleanup AESD specific poritions here as necessary
      */
+
+    //Cleanup memory
+    for(int i = 0; i < AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED; i++) {
+        kfree(aesd_device.circ_buffer.entry[i].buffptr);
+    }
+    if(aesd_device.partial_write)
+    {
+        kfree(aesd_device.partial_write);
+    }
+    mutex_destroy(&aesd_device.lock);
 
     unregister_chrdev_region(devno, 1);
 }
