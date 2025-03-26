@@ -12,6 +12,15 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <time.h>
+#include <sys/ioctl.h>
+#include <stdint.h>
+
+#define AESDCHAR_IOC_MAGIC 0x16
+struct aesd_seekto {
+    uint32_t write_cmd;
+    uint32_t write_cmd_offset;
+};
+#define AESDCHAR_IOCSEEKTO _IOWR(AESDCHAR_IOC_MAGIC, 1, struct aesd_seekto)
 
 #define PORT_ADDRESS 9000
 #define STATIC_BUFFER_SIZE 1024
@@ -94,11 +103,60 @@ void send_file_data_to_client(int client_fd)
 void *handle_client(void *c_fd)
 {
     int client_fd = *((int *)c_fd);
-    free(c_fd);  // Free the allocated memory
-
+    free(c_fd);  // Free the allocated memory for client_fd
     char buffer[STATIC_BUFFER_SIZE];
     ssize_t bytes_received;
+
     while ((bytes_received = recv(client_fd, buffer, STATIC_BUFFER_SIZE - 1, 0)) > 0) {
+        buffer[bytes_received] = '\0';  // Null-terminate for safe string operations
+
+#ifdef USE_AESD_CHAR_DEVICE
+        
+        if (strncmp(buffer, "AESDCHAR_IOCSEEKTO:", strlen("AESDCHAR_IOCSEEKTO:")) == 0) {
+            unsigned int write_cmd, write_cmd_offset;
+            if (sscanf(buffer, "AESDCHAR_IOCSEEKTO:%u,%u", &write_cmd, &write_cmd_offset) == 2) {
+                syslog(LOG_DEBUG, "Received ioctl command: write_cmd=%u, write_cmd_offset=%u",
+                       write_cmd, write_cmd_offset);
+                
+                int fd = open("/dev/aesdchar", O_RDWR);
+                if (fd < 0) {
+                    syslog(LOG_ERR, "Failed to open /dev/aesdchar: %s", strerror(errno));
+                } else {
+                    struct aesd_seekto seekto;
+                    seekto.write_cmd = write_cmd;
+                    seekto.write_cmd_offset = write_cmd_offset;
+                    if (ioctl(fd, AESDCHAR_IOCSEEKTO, &seekto) < 0) {
+                        syslog(LOG_ERR, "ioctl AESDCHAR_IOCSEEKTO failed: %s", strerror(errno));
+                    } else {
+                        char read_buf[STATIC_BUFFER_SIZE];
+                        ssize_t bytes_read;
+                        
+                        while ((bytes_read = read(fd, read_buf, sizeof(read_buf))) > 0) {
+                            if (send(client_fd, read_buf, bytes_read, 0) < 0) {
+                                syslog(LOG_ERR, "send error: %s", strerror(errno));
+                            }
+                        }
+                    }
+                    close(fd);
+                }
+            } else {
+                syslog(LOG_ERR, "Invalid ioctl command format received");
+            }
+            /
+            break;
+        } else {
+            
+            pthread_mutex_lock(&file_mutex);
+            append_to_tmp_file(buffer, bytes_received);
+            if (memchr(buffer, '\n', bytes_received)) {
+                send_file_data_to_client(client_fd);
+                pthread_mutex_unlock(&file_mutex);
+                break;
+            }
+            pthread_mutex_unlock(&file_mutex);
+        }
+#else
+        
         pthread_mutex_lock(&file_mutex);
         append_to_tmp_file(buffer, bytes_received);
         if (memchr(buffer, '\n', bytes_received)) {
@@ -107,9 +165,8 @@ void *handle_client(void *c_fd)
             break;
         }
         pthread_mutex_unlock(&file_mutex);
+#endif
     }
-
-    //close(client_fd);
     return NULL;
 }
 

@@ -20,6 +20,8 @@
 #include <linux/slab.h>  // For kmalloc/kfree
 #include <linux/string.h> // For memchr
 #include "aesdchar.h"
+#include "aesd_ioctl.h"
+
 int aesd_major =   0; // use dynamic major
 int aesd_minor =   0;
 
@@ -27,6 +29,92 @@ MODULE_AUTHOR("Bharath"); /** TODO: fill in your name **/
 MODULE_LICENSE("Dual BSD/GPL");
 
 struct aesd_dev aesd_device;
+
+loff_t aesd_llseek(struct file *filp, loff_t offset, int whence)
+{
+    struct aesd_dev *dev = filp->private_data;
+    loff_t new_f_pos;
+    size_t total_size = 0;
+    size_t i;
+    size_t valid_entries = (dev->circ_buffer.full) ? AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED : dev->circ_buffer.in_offs;
+    
+    mutex_lock(&dev->lock);
+    /* Sum the sizes of all valid entries to compute total size */
+    for (i = 0; i < valid_entries; i++) {
+        size_t index = (dev->circ_buffer.out_offs + i) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+        total_size += dev->circ_buffer.entry[index].size;
+    }
+    
+    switch (whence) {
+        case SEEK_SET:
+            new_f_pos = offset;
+            break;
+        case SEEK_CUR:
+            new_f_pos = filp->f_pos + offset;
+            break;
+        case SEEK_END:
+            new_f_pos = total_size + offset;
+            break;
+        default:
+            mutex_unlock(&dev->lock);
+            return -EINVAL;
+    }
+    
+    if (new_f_pos < 0) {
+        mutex_unlock(&dev->lock);
+        return -EINVAL;
+    }
+    
+    filp->f_pos = new_f_pos;
+    mutex_unlock(&dev->lock);
+    return new_f_pos;
+}
+
+long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+    struct aesd_dev *dev = filp->private_data;
+    struct aesd_seekto seekto;
+    size_t valid_entries;
+    size_t offset = 0;
+    size_t i;
+    
+    if (cmd != AESDCHAR_IOCSEEKTO)
+        return -ENOTTY;
+    
+    if (copy_from_user(&seekto, (struct aesd_seekto *)arg, sizeof(seekto)))
+        return -EFAULT;
+    
+    mutex_lock(&dev->lock);
+    valid_entries = (dev->circ_buffer.full) ? AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED : dev->circ_buffer.in_offs;
+    
+    if (seekto.write_cmd >= valid_entries) {
+        mutex_unlock(&dev->lock);
+        return -EINVAL;
+    }
+    
+    /* Calculate the absolute file offset by iterating over the commands
+     * in the circular buffer (starting from out_offs).
+     */
+    for (i = 0; i < valid_entries; i++) {
+        size_t index = (dev->circ_buffer.out_offs + i) % AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
+        if (i == seekto.write_cmd) {
+            if (seekto.write_cmd_offset >= dev->circ_buffer.entry[index].size) {
+                mutex_unlock(&dev->lock);
+                return -EINVAL;
+            }
+            offset += seekto.write_cmd_offset;
+            break;
+        } else {
+            offset += dev->circ_buffer.entry[index].size;
+        }
+    }
+    
+    filp->f_pos = offset;
+    mutex_unlock(&dev->lock);
+    return 0;
+}
+
+
 
 int aesd_open(struct inode *inode, struct file *filp)
 {
@@ -164,6 +252,8 @@ struct file_operations aesd_fops = {
     .write =    aesd_write,
     .open =     aesd_open,
     .release =  aesd_release,
+    .llseek          = aesd_llseek,
+    .unlocked_ioctl  = aesd_ioctl,
 };
 
 static int aesd_setup_cdev(struct aesd_dev *dev)
