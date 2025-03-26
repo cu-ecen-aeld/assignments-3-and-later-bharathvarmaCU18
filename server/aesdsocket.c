@@ -142,7 +142,6 @@ void *handle_client(void *c_fd)
             } else {
                 syslog(LOG_ERR, "Invalid ioctl command format received");
             }
-            /
             break;
         } else {
             
@@ -156,7 +155,7 @@ void *handle_client(void *c_fd)
             pthread_mutex_unlock(&file_mutex);
         }
 #else
-        
+        /* Case for temporary file: no ioctl handling needed */
         pthread_mutex_lock(&file_mutex);
         append_to_tmp_file(buffer, bytes_received);
         if (memchr(buffer, '\n', bytes_received)) {
